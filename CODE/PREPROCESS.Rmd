@@ -1,0 +1,263 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+\########################################
+
+# OSA Use Case
+
+::: {#dataCleaning .PRDL style="color: black"}
+## **Simple ETL process on a single Excel file**
+
+### Libraries
+
+```{r}
+library(readxl)
+library(dplyr)
+library(visdat)
+library(naniar)
+library(tidyr)
+library(writexl)
+```
+
+\
+
+```{r}
+# Clear the working space
+rm(list=ls())
+
+Input_file <- "Info_BDApnea_QuironMalaga.xlsx"
+Output_file <- "OSA_DB_UPM.xlsx"
+
+#Data_Directory <- "DATA\\"
+Data_Directory <- "C:\\Users\\maron\\OneDrive\\02-Documents\\00.ETUDES\\00.ECOLE_D_INGE\\00.CYCLE_ING_FORMATION_INIT\\00.3EME_ANNEE_INIT\\00.A_COURS\\01.MLLD\\02.ACTIVITIES\\OSA_CASE_STUDY_DONE\\DATA\\"
+```
+
+-   Using readxl package to read an Excel file
+
+-   Install the readxl package is nor already installed
+
+    ```{r}
+    library(readxl)
+
+    df_tmp <- read_excel(paste(Data_Directory, Input_file, sep = ""))
+
+    typeof(df_tmp)
+    is.data.frame(df_tmp)
+    ```
+
+    NOTE:
+
+    :   -   **df_tmp** is NOT only a data frame!
+
+        -   use as.data.frame to avoid later problems\
+
+```{r}
+class(df_tmp)
+df_tmp = as.data.frame(df_tmp)
+class(df_tmp)
+head(df_tmp, 7)
+```
+
+PREPARING THE DATA FRAME
+
+:   -   Select only those columns (variables) we are going
+
+    -   to work with: **Patient**, **Gender**, **IAH**, **Peso**, **Talla**, **Edad**, **PerCervical**
+
+    -   You can work with **dplyr** for using select(**df_tmp**, **Patient**, **Gender**,...)
+
+    <https://cran.r-project.org/web/packages/dplyr/vignettes/dplyr.html>
+
+    -   dplyr's basic set of tools to apply on data frames
+
+```{r}
+library(dplyr)
+
+df_tmp1 <- select(df_tmp, Patient, Gender, IAH, Peso, Talla, Edad, PerCervical)
+```
+
+HOW TO MANAGE Non Available values !!!
+
+:   -   To change **-1** values for **NA** in all columns (i.e. variables) you can install package **naniar** load it
+
+    -   **note:** you can also see
+
+    <https://cran.r-project.org/web/packages/naniar/vignettes/getting-started-w-naniar.html>
+
+    -   BUT first you can visualize the issue with chr, num and NA using visdat
+    -   
+
+```{r}
+library(visdat)
+vis_dat(df_tmp1)
+```
+
+BEFORE CONTINUING EXECUTING NEXT lines of code
+
+:   -   BE SURE TO FIX the Excel removing comments in Peso
+
+    -   **##########################QUESTIONS: \###################**
+
+    -   HOW MANY PATIENTS?
+
+    -   HOW MANY MALE /FEMALE
+
+```{r}
+library(naniar)
+
+# Now change -1 values for NA in all columns (i.e. variables)
+df_tmp2 <- replace_with_na_all(df_tmp1,condition = ~.x == -1)
+df_tmp3 <- df_tmp2
+df_tmp4 <- df_tmp2
+```
+
+### Removing the comments in the columns peso
+
+```{r}
+df_tmp3$Peso <- as.numeric(df_tmp3$Peso)
+df_tmp3$Peso[is.na(df_tmp3$Peso)] <- NA
+
+df_tmp4$Peso <- as.numeric(df_tmp3$Peso)
+df_tmp4$Peso[is.na(df_tmp4$Peso)] <- 45
+```
+
+Note :
+
+:   -   Finally remove (drop out) all rows containing a NA at least one column
+
+    -   You can use **tidyr**
+
+    -   <https://blog.rstudio.com/2014/07/22/introducing-tidyr/>
+
+    -   **tidyr** is a package that makes it easy to "tidy" your data.
+
+    -   Tidy data is data that's easy to work with:
+
+    -   it's easy to munge (with **dplyr**), visualise (with **ggplot2** or **ggvis**) and model (with R's hundreds of modelling packages). The two most important properties of tidy data are:
+
+    -   Each column is a variable.
+
+    -   Each row is an observation.
+
+```{r}
+library(tidyr)
+
+df_final <- df_tmp3 %>% drop_na()
+```
+
+QUESTIONS:
+
+:   **\##### AFTER CLEANING: \#####**
+
+    -   HOW MANY PATIENTS?
+
+    -   HOW MANY MALE /FEMALE?
+
+```{r warning=TRUE, paged.print=FALSE}
+summ = summary(df_final)
+print(summ)
+
+nb_patient = length(df_final$Patient)
+print(nb_patient)
+
+nb_male = length(df_final$Gender[df_final$Gender == "hombre"])
+print(nb_male)
+
+nb_female = length(df_final$Gender[df_final$Gender == "mujer"])
+print(nb_female)
+```
+
+SAVING CLEAN DATA
+
+:   -   Write the clean data into Output_file
+
+    -   you can install **writexl** package
+
+```{r}
+library(writexl)
+
+# You can change the names of the columns
+df_final <- df_final %>% rename(Weight = Peso,
+                                Height = Talla,
+                                Age = Edad,
+                                Cervical = PerCervical)
+
+vis_dat(df_final)
+
+write_xlsx(df_final,
+           paste(Data_Directory, Output_file, sep = ""))
+```
+
+```{r}
+mean_IAH_mal = mean(df_final$IAH[df_final$Gender == "hombre"])
+mean_IAH_female = mean(df_final$IAH[df_final$Gender == "mujer"])
+
+print(mean_IAH_female)
+print(mean_IAH_mal)
+
+df_numerique <- df_final %>%
+  select_if(is.numeric)
+
+print(cor(df_numerique))
+```
+
+Data analysis:
+
+```{r}
+# Distribution of IAH by gender
+Genders <- df_final$Gender
+IAHs <- df_final$IAH
+maleIAHs <- IAHs[Genders =="hombre"]
+femaleIAHs <- IAHs[Genders =="mujer"]
+muMale <- mean(maleIAHs)
+muFemale <- mean(femaleIAHs)
+b <- min(c(maleIAHs,femaleIAHs)) - 0.001
+e <- max(c(maleIAHs,femaleIAHs))
+ax <- pretty(b:e, n = 12)
+hgA <- hist(maleIAHs, breaks = ax)
+hgB <- hist(femaleIAHs, breaks = ax)
+c1 <- rgb(173,216,230,max = 255, alpha = 80, names = "lt.blue")
+c2 <- rgb(255,192,203, max = 255, alpha = 80, names = "lt.pink")
+plot(hgA,col=c1,xlab="IAH")
+plot(hgB,col=c2,add=TRUE)
+```
+
+\
+:::
+
+::: {#Analysis .PRDL style="color : black"}
+# Notes :
+:::
+
+::: {#DataAnalysis .PRDL style="color : black"}
+To analyse the data we can start by seperating the data into to subset, male and female subset
+
+Then we make an analysis of the mean, correlation of the
+
+plot the histogram for the two subset to see what kind of distribution do we have : Poisson distribution / The maen and the median ae not very different
+
+We need the distribution to be Gaussian, then we have to make a transformation of the random variable : We can use Log(but in this case we need to add 1 because the IAH can be 0) or to take the inverse of the random variable
+
+\
+To check if two rv come from the same distribution or not : In our case the two subset
+
+If the distribution of one of them is Gaussian then we can use the T-test, oif not we have to find another type of teste
+
+The test can help to check if a feature is discriminative or not
+
+some useful function :
+
+-   filter
+
+-   %\>%
+
+-   nrow
+
+-   
+
+In some
+
+print the summary of the two subset
+:::
